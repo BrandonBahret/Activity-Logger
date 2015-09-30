@@ -1,0 +1,470 @@
+#include "activitylogger.h"
+#include "ui_activitylogger.h"
+#include <QDebug>
+#include <QListWidget>
+#include <QDateTime>
+#include <QFile>
+#include <QTimer>
+#include <QFileDialog>
+
+activityLogger::activityLogger(QWidget *parent) :
+    QMainWindow(parent),
+    ui(new Ui::activityLogger)
+{
+    QTimer *timer = new QTimer(this);
+    connect(timer, SIGNAL(timeout()), this, SLOT(updateElapsedTime()));
+    timer->start(10);
+
+    ui->setupUi(this);
+    pause_offset=0;
+    epoch=-1;
+    loadActivities();
+    loadEntries();
+    foreach(QListWidgetItem item,activities){
+        ui->activityList->addItem(getItemFromString(item.text()));
+    }
+    ui->activityList_2->setModel(ui->activityList->model());
+}
+
+activityLogger::~activityLogger()
+{
+    delete ui;
+}
+
+QString activityLogger::getTimeFromEpoch(qint64 epoch){
+    //Note: due to integer division, dividing and then multipling by the same number doesn't
+    //neccessarly mean the result will be the original value.
+    epoch=(QDateTime::currentMSecsSinceEpoch()/1000.0-pause_offset)-epoch;
+    int hours=epoch/60/60;
+    epoch-=hours*60*60;
+    int minutes=epoch/60;
+    epoch-=minutes*60;
+    int seconds=epoch;
+    return QString::asprintf("Hours: %d,Minutes: %d,Seconds: %d",hours,minutes,seconds);
+}
+
+void activityLogger::updateElapsedTime()
+{
+    if(ui->stackedWidget->currentIndex()==1 && !ui->pause->isChecked()){
+        QString TimeString=getTimeFromEpoch(epoch);
+        QStringList Time=TimeString.split(",");
+        ui->hoursString->setText(Time[0]);
+        ui->minutesString->setText(Time[1]);
+        ui->secondsString->setText(Time[2]);
+    }
+}
+
+void activityLogger::on_startActivity_clicked()
+{
+    ui->displayData->clear();
+    if(ui->activityList->currentItem()){
+        comments="";
+        QListWidgetItem *item=ui->activityList->currentItem();
+        ui->stackedWidget->setCurrentIndex(1);
+        ui->currentActivity->setText(item->text());
+        epoch=QDateTime::currentMSecsSinceEpoch()/1000.0;
+        QTime currentTime=QTime::currentTime();
+        ui->startTime->setText("Started At: "+currentTime.toString("h:mm:ss AP"));
+        updateElapsedTime();
+    }
+}
+
+QListWidgetItem* activityLogger::getItemFromString(QString Text){
+    QListWidgetItem *item=new QListWidgetItem;
+    item->setText(Text);
+    item->setFlags (item->flags () | Qt::ItemIsEditable);
+    return item;
+}
+
+void activityLogger::updateActivities(){
+    activities.clear();
+    int len=ui->activityList->count();
+    for(int i=0;i<len;i++){
+        QListWidgetItem *item=ui->activityList->item(i);
+        activities.append(*item);
+    }
+}
+
+void activityLogger::on_addActivity_clicked(){
+    foreach(QListWidgetItem act,activities){
+        if(act.text()==ui->newActivityEdit->text()){
+            ui->newActivityEdit->setText("");
+            return;
+        }
+    }
+    QString activityName=ui->newActivityEdit->text().replace("[]n]e]w]l]i]s]t]]","").replace("'/s/e/p/e/r/a/t/e'","").replace("'","");
+    if(ui->newActivityEdit->text().length()>0){
+        QListWidgetItem *item=getItemFromString(activityName);
+        ui->activityList->addItem(item);
+        updateActivities();
+        QStringList lst(item->text());
+        entries.append(lst);
+        saveEntries();
+        saveActivities();
+    }
+    ui->newActivityEdit->setText("");
+}
+
+void activityLogger::saveActivities(){
+    QFile save("activities.txt");
+    if(!save.open(QIODevice::WriteOnly|QIODevice::Text))
+        return;
+    QString write;
+    foreach(QListWidgetItem item,activities){
+        write.append(item.text()+"'/s/e/p/e/r/a/t/e'");
+    }
+    char* data=write.toUtf8().data();
+    save.write(data);
+    save.close();
+}
+
+void activityLogger::loadActivities(){
+    activities.clear();
+    QFile load("activities.txt");
+    if(!load.open(QIODevice::ReadOnly|QIODevice::Text))
+        return;
+    while(!load.atEnd()){
+        QString line=QString::fromStdString(load.readLine().toStdString());
+        QStringList foo=line.split("'/s/e/p/e/r/a/t/e'");
+        foreach(QString name,foo){
+            if(name.length()>0)
+                activities.append(*(getItemFromString(name)));
+        }
+    }
+    load.close();
+}
+
+void activityLogger::saveEntries(){
+    QFile save("entries.txt");
+    if(!save.open(QIODevice::WriteOnly|QIODevice::Text))
+        return;
+    QString write;
+    foreach(QStringList lst,entries){
+        foreach(QString item,lst){
+            if(item.length()<1)continue;
+            write.append(item+"'/s/e/p/e/r/a/t/e'");
+        }
+        if(write.length()>1){
+            write.append("[]n]e]w]l]i]s]t]]");
+        }
+    }
+    std::string data_=write.toStdString();
+    const char* data=data_.data();
+    save.write(data);
+    save.close();
+}
+
+void activityLogger::loadEntries(){
+    entries.clear();
+    QFile load("entries.txt");
+    if(!load.open(QIODevice::ReadOnly|QIODevice::Text))
+        return;
+    QString line;
+    while(!load.atEnd()){
+        line.append(QString::fromStdString(load.readLine().toStdString()));
+    }
+    QStringList arrayEntries=line.split("[]n]e]w]l]i]s]t]]");
+    for(int i=0;i<arrayEntries.length();i++){
+        QString item=arrayEntries[i];
+        QStringList lst=item.split("'/s/e/p/e/r/a/t/e'");
+        if(lst.length()>0)
+            entries.append(lst);
+    }
+    load.close();
+    while(true){
+        for(int i=0;i<entries.length();i++){
+            for(int j=0;j<entries[i].length();j++){
+                QString t;
+                t=entries[i].at(j);
+                if(t.length()<1){
+                    entries[i].removeAt(j);
+                    continue;
+                }
+            }
+        }
+        break;
+    }
+}
+
+void activityLogger::on_cancel_clicked()
+{
+    ui->commentEditor->setText("");
+    ui->pause->setChecked(false);
+    ui->stackedWidget->setCurrentIndex(0);
+    pause_offset=0;
+    epoch=-1;
+}
+
+void activityLogger::on_editActivity_clicked()
+{
+    if(ui->activityList->currentItem()){
+        QListWidgetItem *item=ui->activityList->currentItem();
+        ui->activityList->editItem(item);
+    }
+}
+
+void activityLogger::printEnteries()
+{
+    foreach(QStringList lst,entries){
+        foreach(QString entry,lst){
+            qDebug()<<entry<<entry.length()<<endl;
+        }
+    }
+}
+
+void activityLogger::on_removeActivity_clicked()
+{
+    if(ui->activityList->currentItem()){
+        ui->displayData->clear();//setText("");
+        QListWidgetItem *item=ui->activityList->currentItem();
+        QStringList lst;
+        for(int i=0; i<entries.length();i++){
+            lst=entries[i];
+            if(lst.length()>0){
+                if(lst[0]==item->text()){
+                    entries.removeAt(i);
+                    break;
+                }
+            }
+        }
+        delete item;
+        updateActivities();
+        saveActivities();
+        printEnteries();
+        saveEntries();
+    }
+}
+
+void activityLogger::on_pause_clicked(bool checked)
+{
+    if(checked){
+        timeAtPause=QDateTime::currentMSecsSinceEpoch()/1000.0;
+    }
+    else{
+        timeAfterPause=QDateTime::currentMSecsSinceEpoch()/1000.0;
+        pause_offset+=timeAfterPause-timeAtPause;
+    }
+}
+
+void activityLogger::on_finish_clicked(){
+    ui->commentEditor->setText("");
+    QString activity=ui->activityList->currentItem()->text();
+    int len=entries.length();
+    for(int i=0;i<len;i++){
+        if(entries[i].length()>0){
+            if(entries[i][0]==activity){
+                //8/10/15 8:30 AM - Watching YouTube:
+                //Hours: 1 Minutes: 58 Seconds: 48
+                time_t time=epoch;
+                QDateTime startingDateTime=QDateTime::fromTime_t(time);
+                QString start_time=ui->startTime->text().replace("Started At: ","");
+                QString date=startingDateTime.date().toString("MMMM/dd/yyyy");
+                QString Total=getTimeFromEpoch(epoch).replace("'/s/e/p/e/r/a/t/e'"," ");
+                QString Final=QString::asprintf("%s - %s %s\nDuration[%s]\nComments: %s",activity.toStdString().data(),
+                                                date.toStdString().data(),start_time.toStdString().data(),Total.toStdString().data(),
+                                                comments.toStdString().data());
+                entries[i].append(Final);
+                break;
+            }
+        }
+    }
+    pause_offset=0;
+    ui->pause->setChecked(false);
+    ui->stackedWidget->setCurrentIndex(0);
+    saveEntries();
+    epoch=-1;
+}
+
+void activityLogger::on_activityList_2_clicked(const QModelIndex &index){
+    ui->displayData->clear();//setText("");
+    QString itemName=index.model()->data(index, Qt::DisplayRole).toString();
+    QStringList lst;
+    for(int i=0; i<entries.length();i++){
+        lst=entries[i];
+        if(lst.length()>0){
+            if(lst[0]==itemName){
+                lst=entries[i];
+                break;
+            }
+        }
+    }
+    lst.removeAt(0);
+    foreach(QString str,lst){
+        ui->displayData->addItem(str);
+    }
+}
+
+void activityLogger::on_addComments_clicked()
+{
+    ui->stackedWidget->setCurrentIndex(2);
+}
+
+void activityLogger::on_comment_cancel_clicked()
+{
+    if(epoch!=-1){
+        ui->stackedWidget->setCurrentIndex(1);
+    }
+    else{
+        ui->stackedWidget->setCurrentIndex(0);
+    }
+}
+
+void activityLogger::on_comment_submit_clicked()
+{
+    if(epoch!=-1){
+        comments=ui->commentEditor->toPlainText().replace("[]n]e]w]l]i]s]t]]","").replace("'/s/e/p/e/r/a/t/e'","").replace("'","");
+        ui->stackedWidget->setCurrentIndex(1);
+    }
+    else{
+        QString entry=ui->displayData->currentItem()->text();
+        int index = getDisplayDataIndex();
+        int itemIndex = getItemIndexFromEntry(entry, index);
+        QString entryText=entries[index][itemIndex];
+        QStringList items=entryText.split("Comments:");
+        entries[index][itemIndex]=items[0]+"Comments: "+ui->commentEditor->toPlainText().replace("[]n]e]w]l]i]s]t]]","").replace("'/s/e/p/e/r/a/t/e'","").replace("'","");
+        ui->stackedWidget->setCurrentIndex(0);
+        on_activityList_2_clicked(ui->activityList_2->currentIndex());
+        saveEntries();
+    }
+}
+
+int activityLogger::getDisplayDataIndex()
+{
+    QModelIndex cIndex=ui->activityList_2->currentIndex();
+    QString activityName=cIndex.model()->data(cIndex, Qt::DisplayRole).toString();
+    //Get activity index in the entries object
+    int index=-1;
+    QStringList lst;
+    for(int i=0; i<entries.length();i++){
+        lst=entries[i];
+        if(lst.length()>0){
+            if(lst[0]==activityName){
+                index=i;
+                break;
+            }
+        }
+    }
+
+    return index;
+}
+
+int activityLogger::getItemIndexFromEntry(QString entry, int index){
+    int itemIndex=-1;
+    for(int i=0;i<entries[index].length();i++){
+        if(entries[index][i]==entry){
+            itemIndex=i;
+            break;
+        }
+    }
+    return itemIndex;
+}
+
+void activityLogger::on_editComment_clicked()
+{
+    if(ui->displayData->currentItem()){
+        QString entry=ui->displayData->currentItem()->text();
+        QStringList items=entry.split("Comments:");
+        //Set up the comment editor for the entry.
+        QString text=items[1];
+        text.remove(0,1);
+        ui->commentEditor->setText(text);
+        ui->stackedWidget->setCurrentIndex(2);
+    }
+}
+
+QString activityLogger::substring(QString inputString,int begin,int end){
+    QString substr;
+    for(int i=begin+1;i<end;i++){
+        substr.append(inputString[i]);
+    }
+    return substr;
+}
+
+qint64 activityLogger::countLeapYears(int year){
+    int count;
+    for(int i=1970;i<year;i++){
+        count+=QDate::isLeapYear(i);
+    }
+    return count;
+}
+
+
+void activityLogger::on_exportTimestamps_clicked(){
+    if(ui->activityList_2->currentIndex().model()){
+        QString filename=QFileDialog::getSaveFileName(0,QString(),QString(),"*.csv");
+        if(filename.length()>0){
+            if(!filename.endsWith(".csv"))
+                filename.append(".csv");
+            QFile writeFile(filename);
+            if(!writeFile.open(QIODevice::WriteOnly|QIODevice::Text))
+                return;
+            QString output="Started at,Duration\n";
+            foreach(QString entry,entries[getDisplayDataIndex()]){
+                QString substr=substring(entry,entry.indexOf("["),entry.indexOf("]"));
+                if(substr.length()>0){
+                    //Code for adding the starting time "lld,"
+                    QStringList dateTime=substring(entry,entry.indexOf('-')+1,entry.indexOf("Duration")-1).split(' ');
+                    QStringList date=dateTime[0].split("/");
+                    QStringList time=dateTime[1].split(":");
+                    bool isPM=dateTime[2]=="PM";
+                    qint64 startSeconds=0;
+
+                    //Add time to startSeconds
+                    if(isPM)startSeconds+=43200;//When it's in the PM add 12 hrs
+                    startSeconds+=time[2].toInt();
+                    startSeconds+=time[1].toInt()*60;
+                    startSeconds+=time[0].toInt()*3600;
+
+                    //Add date to startSeconds
+                    startSeconds+=((date[2].toInt()-1970)*(365*24*3600))-(countLeapYears(date[2].toInt())*24*3600);
+                    startSeconds+=date[1].toInt()*24*3600;
+                    QDate monthForDate=QDate::fromString("1 "+date[0]+" 1970", Qt::TextDate);
+                    startSeconds+=monthForDate.month()*30.41666*24*3600;
+                    QString dateAdd=QString::asprintf("%lld,",startSeconds);
+                    output.append(dateAdd);
+
+                    qint64 durationSeconds=0;
+                    QStringList durationTime=substr.split(',');
+                    durationSeconds+=durationTime[0].replace("Hours: ","").toInt()*60*60;
+                    durationSeconds+=durationTime[1].replace("Minutes: ","").toInt()*60;
+                    durationSeconds+=durationTime[2].replace("Seconds: ","").toInt();
+                    QString add=QString::asprintf("%lld",durationSeconds);
+                    output.append(add);
+                }
+            }
+            writeFile.write(output.toStdString().data());
+            writeFile.close();
+        }
+    }
+}
+
+void activityLogger::on_exportText_clicked(){
+    if(ui->activityList_2->currentIndex().model()){
+        QString filename=QFileDialog::getSaveFileName(0,QString(),QString(),"*.txt");
+        if(filename.length()>0){
+            if(!filename.endsWith(".txt"))
+                filename.append(".txt");
+            QFile writeFile(filename);
+            if(!writeFile.open(QIODevice::WriteOnly|QIODevice::Text))
+                return;
+            QString output;
+            foreach(QString entry,entries[getDisplayDataIndex()]){
+                output.append(entry);
+                output.append("\n\n");
+            }
+            writeFile.write(output.toStdString().data());
+            writeFile.close();
+        }
+    }
+}
+
+void activityLogger::on_deleteEntry_clicked(){
+    if(ui->displayData->currentItem()){
+        int index=getDisplayDataIndex();
+        QString entry=ui->displayData->currentItem()->text();
+        int itemIndex=getItemIndexFromEntry(entry,index);
+        entries[getDisplayDataIndex()].removeAt(itemIndex);
+        saveEntries();
+        on_activityList_2_clicked(ui->activityList_2->currentIndex());
+    }
+}
