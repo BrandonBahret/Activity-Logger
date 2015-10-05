@@ -8,7 +8,7 @@ To add new activities:
 
 To Start logging an activity:
   click the name of the activity, then click "Start Activity"
-  Once finished you can click "Add Comments" to write a summary of what you did.
+  Write a summary of what you did in the text field.
   Finally click "finish" to save the log.
 
 To Remove an activity:
