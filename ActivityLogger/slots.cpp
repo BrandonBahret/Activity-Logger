@@ -33,11 +33,6 @@ void activityLogger::on_addActivity_clicked(){
     ui->newActivityEdit->setText("");
 }
 
-
-void activityLogger::on_addComments_clicked(){
-    ui->stackedWidget->setCurrentIndex(2);
-}
-
 void activityLogger::on_comment_cancel_clicked(){
         ui->stackedWidget->setCurrentIndex(epoch!=-1); //If we arn't doing an activity go to page 0 else 1
 }
@@ -63,7 +58,7 @@ void activityLogger::on_comment_submit_clicked(){
 }
 
 void activityLogger::on_cancel_clicked(){
-    ui->commentEditor->setText("");
+    ui->commentEditorMain->setText("");
     ui->pause->setChecked(false);
     ui->stackedWidget->setCurrentIndex(0);
     pause_offset=0;
@@ -106,14 +101,19 @@ void activityLogger::on_removeActivity_clicked(){
 }
 
 void activityLogger::on_pause_clicked(bool checked){
-    timeAtPause= QDateTime::currentMSecsSinceEpoch()/1000.0;
+
     if(checked!=true){
+        timeAfterPause=QDateTime::currentMSecsSinceEpoch()/1000.0;
         pause_offset+=timeAfterPause-timeAtPause;
+    }
+    else{
+        timeAtPause= QDateTime::currentMSecsSinceEpoch()/1000.0;
     }
 }
 
 void activityLogger::on_finish_clicked(){
-    ui->commentEditor->setText("");
+    comments=ui->commentEditorMain->toPlainText();
+    ui->commentEditorMain->setText("");
     QString activity=ui->activityList->currentItem()->text();
     int len=entries.length();
     for(int i=0;i<len;i++){

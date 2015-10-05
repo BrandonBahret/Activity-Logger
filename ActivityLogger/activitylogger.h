@@ -61,7 +61,6 @@ private slots:
     void on_pause_clicked(bool checked);
     void on_finish_clicked();
     void on_activityList_2_clicked();
-    void on_addComments_clicked();
     void on_comment_cancel_clicked();
     void on_comment_submit_clicked();
     void on_editComment_clicked();
