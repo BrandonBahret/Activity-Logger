@@ -1,6 +1,8 @@
 # Activity-Logger
 A program made with C++ and Qt to make logs for any activity you do.
 
+![Screen Capture](https://github.com/BrandonBahret/Activity-Logger/blob/master/Animation.gif)
+
 ---Activities Tab---
 
 To add new activities:
